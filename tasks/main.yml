@@ -5,8 +5,14 @@
 - name: create ext volume for temp data
   file: state=directory path={{ ext_solr_temp_volume }}
 
-#- name: create ext volume for configs
-#  file: state=directory path={{ ext_hadoop_conf_volume }}
+- name: create ext volume for home
+  file: state=directory path={{ ext_solr_home_volume }}
+
+- name: put solr.xml
+  template: src=solr.xml dest={{ ext_solr_home_volume }}/solr.xml
+
+- name: put zoo.cfg
+  template: src=zoo.cfg dest={{ ext_solr_home_volume }}/zoo.cfg
 
 - name: check if a solr-nocloud-nohdfs container is started
   command: bash -c "docker ps | grep solr-nocloud-nohdfs"
@@ -14,7 +20,18 @@
   register: result
 
 - name: start a solr-nocloud-nohdfs container
-  command: docker run -d {% if docker_net_false|default(False) %} -n=false {% endif %} -h {{ ansible_hostname }}{% if docker_net_false|default(False) %}-sn{% endif %} --dns {{ ansible_docker0.ipv4.address }} --dns 8.8.8.8 --read-only=true --dns-search node.dc1.consul -v {{ ext_solr_temp_volume }}:/solr/server/solr-webapp -v {{ ext_solr_logs_volume }}:/solr/server/logs/ -p {{ solr_port }}:8983 -name solr-nocloud-nohdfs gitinsky/solr-nocloud-nohdfs:0.1.0
+  command: docker run -d
+              {% if docker_net_false|default(False) %} -n=false {% endif %}
+              -h {{ ansible_hostname }}{% if docker_net_false|default(False) %}-sn{% endif %}
+              --dns {{ ansible_docker0.ipv4.address }}
+              --dns 8.8.8.8
+              --read-only=true
+              --dns-search node.dc1.consul
+              -v {{ ext_solr_temp_volume }}:/solr/server/solr-webapp
+              -v {{ ext_solr_logs_volume }}:/solr/server/logs/
+              -v {{ ext_solr_home_volume }}:/solr/home
+              -p {{ solr_port }}:8983
+              --name=solr-nocloud-nohdfs gitinsky/solr-nocloud-nohdfs:0.1.0
   register: docker_id
   when: result|failed
 
