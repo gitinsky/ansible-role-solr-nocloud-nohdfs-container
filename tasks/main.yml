@@ -1,40 +1,41 @@
 ---
-- name: create ext volume for data
+- name: create ext volumes
   file: state=directory path={{ ext_solr_logs_volume }}
+  with_items:
+      - "{{ ext_solr_logs_volume }}"
+      - "{{ ext_solr_temp_volume }}"
+      - "{{ ext_solr_home_volume }}"
+      - "{{ ext_solr_conf_volume }}"
 
-- name: create ext volume for temp data
-  file: state=directory path={{ ext_solr_temp_volume }}
-
-- name: create ext volume for home
-  file: state=directory path={{ ext_solr_home_volume }}
-
-- name: put solr.xml
+- name: put configs solr.xml
   template: src=solr.xml dest={{ ext_solr_home_volume }}/solr.xml
 
 - name: put zoo.cfg
   template: src=zoo.cfg dest={{ ext_solr_home_volume }}/zoo.cfg
 
-- name: check if a solr-nocloud-nohdfs container is started
-  command: bash -c "docker ps | grep solr-nocloud-nohdfs"
-  ignore_errors: True
-  register: result
-
 - name: start a solr-nocloud-nohdfs container
-  command: docker run -d
-              {% if docker_net_false|default(False) %} -n=false {% endif %}
-              -h {{ ansible_hostname }}{% if docker_net_false|default(False) %}-sn{% endif %}
-              --dns {{ ansible_docker0.ipv4.address }}
-              --dns 8.8.8.8
-              --read-only=true
-              --dns-search node.dc1.consul
-              -v {{ ext_solr_temp_volume }}:/solr/server/solr-webapp
-              -v {{ ext_solr_logs_volume }}:/solr/server/logs/
-              -v {{ ext_solr_home_volume }}:/solr/home
-              -p {{ solr_port }}:8983
-              --name=solr-nocloud-nohdfs gitinsky/solr-nocloud-nohdfs:0.1.0
+  docker:
+    image: gitinsky/solr-nocloud-nohdfs
+    dns:
+        - "{{ ansible_docker0.ipv4.address }}"
+        - 8.8.8.8
+    net: "{{ 'none' if docker_net_false|default(False) else 'bridge' }}"
+    hostname: "{{ ansible_hostname }}{% if docker_net_false|default(False) %}-sn{% endif %}"
+    volumes:
+        - "{{ ext_solr_temp_volume }}:/solr/server/solr-webapp"
+        - "{{ ext_solr_logs_volume }}:/solr/server/logs/"
+        - "{{ ext_solr_home_volume }}:/solr/home"
+        - "{{ ext_solr_temp_volume }}:/solr/server/solr-webapp"
+        - "{{ ext_solr_conf_volume }}:/solr/server/solr/configsets/custom"
+    expose:
+      - 8983
+    ports:
+        - "{{ solr_port }}:8983"
+    name: solr-nocloud-nohdfs
+    restart_policy: always
+    state: restarted
   register: docker_id
-  when: result|failed
 
 - name: start network
-  shell: /root/ovswork.sh br10 {{ docker_id.stdout }} {{ network_map[ '' + ansible_hostname + '-sn' ] }}/24 {{ network_map[ '_broadcast' ] }} {{ network_map['_gateway'] }}
+  shell: /root/ovswork.sh br10 {{ docker_id.containers[0].Id }} {{ network_map[ '' + ansible_hostname + '-sn' ] }}/24 {{ network_map[ '_broadcast' ] }} {{ network_map['_gateway'] }}
   when: (docker_id.changed == True) and (docker_net_false|default(False) == True)

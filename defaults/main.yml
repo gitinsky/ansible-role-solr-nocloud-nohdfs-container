@@ -1,0 +1,5 @@
+ext_solr_logs_volume: /var/lib/docker-extvols/solr-logs
+ext_solr_temp_volume: /var/lib/docker-extvols/solr-temp
+ext_solr_home_volume: /var/lib/docker-extvols/solr-home
+ext_solr_conf_volume: /var/lib/docker-extvols/solr-conf
+solr_port: 38983
